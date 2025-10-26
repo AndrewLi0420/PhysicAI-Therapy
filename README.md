@@ -1,7 +1,6 @@
-
 # Personalized Physical Therapy App
 
-This is a code bundle for Personalized Physical Therapy App. The original project is available at https://www.figma.com/design/y4vkudqpjAtolUpFswN7CJ/Personalized-Physical-Therapy-App.
+Welcome to PhysicAI Therapy - A comprehensive physical therapy application with AI-powered exercise recommendations.
 
 ## Features
 
@@ -35,3 +34,4 @@ Run `npm run dev` to start the development server.
 - Tailwind CSS for styling
 - Lucide React for icons
 - Free Exercise DB API for exercise data
+- Python Flask backend for advanced recommendations
