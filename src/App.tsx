@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { AssessmentFlow } from './components/AssessmentFlow';
 import { ExerciseDetail } from './components/ExerciseDetail';
+import { ExerciseLibrary } from './components/ExerciseLibrary';
 import { Toaster } from './components/ui/sonner';
 
 export type UserProfile = {
@@ -41,6 +42,7 @@ export default function App() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
+  const [showExerciseLibrary, setShowExerciseLibrary] = useState(false);
 
   // Initialize mock data
   useEffect(() => {
@@ -321,6 +323,18 @@ export default function App() {
     );
   }
 
+  if (showExerciseLibrary) {
+    return (
+      <>
+        <ExerciseLibrary
+          onSelectExercise={setSelectedExercise}
+          onBack={() => setShowExerciseLibrary(false)}
+        />
+        <Toaster />
+      </>
+    );
+  }
+
   if (selectedExercise) {
     return (
       <>
@@ -342,6 +356,7 @@ export default function App() {
         workoutLogs={workoutLogs}
         onSelectExercise={setSelectedExercise}
         onResetAssessment={handleResetAssessment}
+        onOpenExerciseLibrary={() => setShowExerciseLibrary(true)}
       />
       <Toaster />
     </>

@@ -6,6 +6,7 @@ import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { ExerciseCard } from './ExerciseCard';
 import { ProgressChart } from './ProgressChart';
+import { PersonalizedRecommendations } from './PersonalizedRecommendations';
 import { 
   Activity, 
   Target, 
@@ -13,7 +14,9 @@ import {
   Calendar,
   Settings,
   Award,
-  Flame
+  Flame,
+  Library,
+  Brain
 } from 'lucide-react';
 import { UserProfile, Exercise, WorkoutLog } from '../App';
 
@@ -23,6 +26,7 @@ type DashboardProps = {
   workoutLogs: WorkoutLog[];
   onSelectExercise: (exercise: Exercise) => void;
   onResetAssessment: () => void;
+  onOpenExerciseLibrary: () => void;
 };
 
 export function Dashboard({ 
@@ -30,7 +34,8 @@ export function Dashboard({
   exercises, 
   workoutLogs, 
   onSelectExercise,
-  onResetAssessment 
+  onResetAssessment,
+  onOpenExerciseLibrary
 }: DashboardProps) {
   const [activeTab, setActiveTab] = useState('today');
 
@@ -217,6 +222,14 @@ export function Dashboard({
               <Activity className="h-4 w-4 mr-2" />
               All Exercises
             </TabsTrigger>
+            <TabsTrigger value="recommendations">
+              <Brain className="h-4 w-4 mr-2" />
+              AI Recommendations
+            </TabsTrigger>
+            <TabsTrigger value="library">
+              <Library className="h-4 w-4 mr-2" />
+              Exercise Library
+            </TabsTrigger>
             <TabsTrigger value="progress">
               <TrendingUp className="h-4 w-4 mr-2" />
               Progress
@@ -264,7 +277,7 @@ export function Dashboard({
           <TabsContent value="all" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Exercise Library</CardTitle>
+                <CardTitle>Personalized Exercises</CardTitle>
                 <CardDescription>
                   All exercises tailored to your ability level
                 </CardDescription>
@@ -279,6 +292,41 @@ export function Dashboard({
                       logs={workoutLogs.filter(log => log.exerciseId === exercise.id)}
                     />
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="recommendations" className="space-y-4">
+            <PersonalizedRecommendations
+              userPainLevel={userProfile.painLevel as any}
+              userMobilityLevel={userProfile.mobilityLevel as any}
+              userCondition={userProfile.condition}
+              builtInExercises={exercises}
+              onSelectExercise={onSelectExercise}
+            />
+          </TabsContent>
+
+          <TabsContent value="library" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Exercise Library</CardTitle>
+                <CardDescription>
+                  Access our comprehensive library of 800+ physical therapy exercises
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <Library className="h-16 w-16 text-blue-600 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">Explore Exercise Library</h3>
+                  <p className="text-gray-600 mb-6">
+                    Browse through hundreds of exercises from our curated database, 
+                    filtered specifically for physical therapy and rehabilitation.
+                  </p>
+                  <Button onClick={onOpenExerciseLibrary} size="lg" className="px-8">
+                    <Library className="h-5 w-5 mr-2" />
+                    Open Exercise Library
+                  </Button>
                 </div>
               </CardContent>
             </Card>
