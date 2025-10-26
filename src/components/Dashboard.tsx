@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -6,7 +6,7 @@ import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { ExerciseCard } from './ExerciseCard';
 import { ProgressChart } from './ProgressChart';
-import { PersonalizedRecommendations } from './PersonalizedRecommendations';
+import { pythonBackendService } from '../services/pythonBackendService';
 import { 
   Activity, 
   Target, 
@@ -15,61 +15,88 @@ import {
   Settings,
   Award,
   Flame,
-  Library,
-  Brain
+  Library
 } from 'lucide-react';
 import { UserProfile, Exercise, WorkoutLog } from '../App';
 
 type DashboardProps = {
   userProfile: UserProfile;
-  exercises: Exercise[];
+  exerciseLibrary: Exercise[];
+  userSelectedExercises: Exercise[];
   workoutLogs: WorkoutLog[];
   onSelectExercise: (exercise: Exercise) => void;
+  onAddExerciseToUserSelection: (exercise: Exercise) => void;
+  onRemoveExerciseFromUserSelection: (exerciseId: string) => void;
   onResetAssessment: () => void;
   onOpenExerciseLibrary: () => void;
+  apiError: string | null;
+  onRetryApi: () => Promise<void>;
 };
 
 export function Dashboard({ 
   userProfile, 
-  exercises, 
+  exerciseLibrary,
+  userSelectedExercises,
   workoutLogs, 
   onSelectExercise,
+  onAddExerciseToUserSelection,
+  onRemoveExerciseFromUserSelection,
   onResetAssessment,
-  onOpenExerciseLibrary
+  onOpenExerciseLibrary,
+  apiError,
+  onRetryApi
 }: DashboardProps) {
   const [activeTab, setActiveTab] = useState('today');
+  const [aiRecommendedExercises, setAiRecommendedExercises] = useState<Exercise[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
 
-  // Calculate personalized exercises based on user profile
-  const personalizedExercises = useMemo(() => {
-    let filtered = exercises;
-
-    // Filter by difficulty based on pain and mobility levels
-    if (userProfile.painLevel > 6 || userProfile.mobilityLevel < 4) {
-      filtered = filtered.filter(e => e.difficulty === 'beginner');
-    } else if (userProfile.painLevel > 3 || userProfile.mobilityLevel < 7) {
-      filtered = filtered.filter(e => e.difficulty === 'beginner' || e.difficulty === 'intermediate');
+  // Generate AI recommendations using the API
+  const generateAIRecommendations = async (profile: UserProfile): Promise<Exercise[]> => {
+    try {
+      const recommendations = await pythonBackendService.getPersonalizedRecommendations(
+        profile.painLevel,
+        profile.mobilityLevel,
+        profile.condition,
+        profile.goals,
+        30 // Get top 30 recommendations
+      );
+      
+      // Convert API recommendations to app exercises
+      return recommendations.map(rec => pythonBackendService.convertToAppExercise(rec.exercise));
+    } catch (error) {
+      console.error('Failed to get AI recommendations:', error);
+      return [];
     }
+  };
 
-    // Sort by relevance to user's selected body part
-    const sorted = [...filtered].sort((a, b) => {
-      const aMatches = a.bodyParts.includes(userProfile.condition);
-      const bMatches = b.bodyParts.includes(userProfile.condition);
-      
-      // Prioritize exercises that match the user's condition
-      if (aMatches && !bMatches) return -1;
-      if (!aMatches && bMatches) return 1;
-      
-      // If both match or both don't match, keep original order
-      return 0;
-    });
+  // Initialize AI recommendations when user profile changes
+  useEffect(() => {
+    const loadRecommendations = async () => {
+      if (userProfile) {
+        setLoadingRecommendations(true);
+        try {
+          const recommendations = await generateAIRecommendations(userProfile);
+          setAiRecommendedExercises(recommendations);
+        } catch (error) {
+          console.error('Failed to load AI recommendations:', error);
+          setAiRecommendedExercises([]);
+        } finally {
+          setLoadingRecommendations(false);
+        }
+      }
+    };
 
-    return sorted;
-  }, [exercises, userProfile]);
+    loadRecommendations();
+  }, [userProfile]);
 
-  // Today's recommended exercises (adaptive)
+  // Today's recommended exercises (randomly selected from user's exercises)
   const todaysExercises = useMemo(() => {
-    return personalizedExercises.slice(0, 4);
-  }, [personalizedExercises]);
+    if (userSelectedExercises.length === 0) return [];
+    
+    // Shuffle array and take first 4
+    const shuffled = [...userSelectedExercises].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 4);
+  }, [userSelectedExercises]);
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -86,7 +113,7 @@ export function Dashboard({
     ).length;
 
     const streak = calculateStreak(workoutLogs);
-    const weeklyProgress = (thisWeek.filter(l => l.completed).length / (personalizedExercises.length * 7)) * 100;
+    const weeklyProgress = (thisWeek.filter(l => l.completed).length / (userSelectedExercises.length * 7)) * 100;
 
     return {
       completedToday,
@@ -94,7 +121,7 @@ export function Dashboard({
       streak,
       weeklyProgress: Math.min(weeklyProgress, 100)
     };
-  }, [workoutLogs, todaysExercises, personalizedExercises]);
+  }, [workoutLogs, todaysExercises, userSelectedExercises]);
 
   function calculateStreak(logs: WorkoutLog[]): number {
     if (logs.length === 0) return 0;
@@ -213,48 +240,69 @@ export function Dashboard({
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-4">
-            <TabsTrigger value="today">
-              <Calendar className="h-4 w-4 mr-2" />
-              Today's Plan
-            </TabsTrigger>
-            <TabsTrigger value="all">
-              <Activity className="h-4 w-4 mr-2" />
-              All Exercises
-            </TabsTrigger>
-            <TabsTrigger value="recommendations">
-              <Brain className="h-4 w-4 mr-2" />
-              AI Recommendations
-            </TabsTrigger>
-            <TabsTrigger value="library">
-              <Library className="h-4 w-4 mr-2" />
-              Exercise Library
-            </TabsTrigger>
-            <TabsTrigger value="progress">
-              <TrendingUp className="h-4 w-4 mr-2" />
-              Progress
-            </TabsTrigger>
-          </TabsList>
+        <TabsList className="mb-4">
+          <TabsTrigger value="today">
+            <Calendar className="h-4 w-4 mr-2" />
+            Today's Plan
+          </TabsTrigger>
+          <TabsTrigger value="your-exercises">
+            <Activity className="h-4 w-4 mr-2" />
+            Your Exercises
+          </TabsTrigger>
+          <TabsTrigger value="ai-recommended">
+            <Target className="h-4 w-4 mr-2" />
+            AI Recommended
+          </TabsTrigger>
+          <TabsTrigger value="library">
+            <Library className="h-4 w-4 mr-2" />
+            Exercise Library
+          </TabsTrigger>
+          <TabsTrigger value="progress">
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Progress
+          </TabsTrigger>
+        </TabsList>
 
           <TabsContent value="today" className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Today's Recommended Exercises</CardTitle>
                 <CardDescription>
-                  Personalized for your {userProfile.condition.toLowerCase()} recovery
+                  {userSelectedExercises.length > 0 
+                    ? `Randomly selected from your ${userSelectedExercises.length} chosen exercises`
+                    : "Add exercises from AI Recommended tab to get your daily plan"
+                  }
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {todaysExercises.map(exercise => (
-                    <ExerciseCard
-                      key={exercise.id}
-                      exercise={exercise}
-                      onSelect={() => onSelectExercise(exercise)}
-                      logs={workoutLogs.filter(log => log.exerciseId === exercise.id)}
-                    />
-                  ))}
-                </div>
+                {todaysExercises.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {todaysExercises.map(exercise => (
+                      <ExerciseCard
+                        key={exercise.id}
+                        exercise={exercise}
+                        onSelect={() => onSelectExercise(exercise)}
+                        logs={workoutLogs.filter(log => log.exerciseId === exercise.id)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Calendar className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold mb-2">No exercises selected yet</h3>
+                    <p className="text-gray-600 mb-4">
+                      Go to the AI Recommended tab to find exercises that match your condition, 
+                      then add them to Your Exercises to get your daily plan.
+                    </p>
+                    <Button 
+                      onClick={() => setActiveTab('ai-recommended')}
+                      variant="outline"
+                    >
+                      <Target className="h-4 w-4 mr-2" />
+                      Browse AI Recommendations
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -274,37 +322,109 @@ export function Dashboard({
             </Card>
           </TabsContent>
 
-          <TabsContent value="all" className="space-y-4">
+          <TabsContent value="your-exercises" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Personalized Exercises</CardTitle>
+                <CardTitle>Your Selected Exercises</CardTitle>
                 <CardDescription>
-                  All exercises tailored to your ability level
+                  Exercises you've chosen from AI recommendations. These will be used for your daily plans.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {personalizedExercises.map(exercise => (
-                    <ExerciseCard
-                      key={exercise.id}
-                      exercise={exercise}
-                      onSelect={() => onSelectExercise(exercise)}
-                      logs={workoutLogs.filter(log => log.exerciseId === exercise.id)}
-                    />
-                  ))}
-                </div>
+                {userSelectedExercises.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {userSelectedExercises.map(exercise => (
+                      <ExerciseCard
+                        key={exercise.id}
+                        exercise={exercise}
+                        onSelect={() => onSelectExercise(exercise)}
+                        logs={workoutLogs.filter(log => log.exerciseId === exercise.id)}
+                        showRemoveButton={true}
+                        onRemove={() => onRemoveExerciseFromUserSelection(exercise.id)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Activity className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold mb-2">No exercises selected yet</h3>
+                    <p className="text-gray-600 mb-4">
+                      Browse AI recommendations and add exercises that interest you.
+                    </p>
+                    <Button 
+                      onClick={() => setActiveTab('ai-recommended')}
+                      variant="outline"
+                    >
+                      <Target className="h-4 w-4 mr-2" />
+                      Browse AI Recommendations
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="recommendations" className="space-y-4">
-            <PersonalizedRecommendations
-              userPainLevel={userProfile.painLevel as any}
-              userMobilityLevel={userProfile.mobilityLevel as any}
-              userCondition={userProfile.condition}
-              builtInExercises={exercises}
-              onSelectExercise={onSelectExercise}
-            />
+          <TabsContent value="ai-recommended" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>AI Recommended Exercises</CardTitle>
+                <CardDescription>
+                  {loadingRecommendations ? (
+                    <div className="flex items-center text-blue-600">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      Analyzing your profile and generating recommendations...
+                    </div>
+                  ) : (
+                    `Top ${aiRecommendedExercises.length} exercises tailored for your ${userProfile.condition.toLowerCase()} condition using AI analysis`
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingRecommendations ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <h3 className="text-xl font-semibold mb-2">Generating AI Recommendations</h3>
+                    <p className="text-gray-600">
+                      Analyzing your pain level, mobility, and condition using our AI recommendation engine to find the best exercises for you.
+                    </p>
+                  </div>
+                ) : aiRecommendedExercises.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {aiRecommendedExercises.map(exercise => {
+                      const isSelected = userSelectedExercises.some(e => e.id === exercise.id);
+                      return (
+                        <ExerciseCard
+                          key={exercise.id}
+                          exercise={exercise}
+                          onSelect={() => onSelectExercise(exercise)}
+                          logs={workoutLogs.filter(log => log.exerciseId === exercise.id)}
+                          showAddButton={true}
+                          isAdded={isSelected}
+                          onAdd={() => onAddExerciseToUserSelection(exercise)}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Target className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold mb-2">
+                      {apiError ? 'Connection Error' : 'Unable to load recommendations'}
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      {apiError || 'There was an issue connecting to our AI recommendation service. Please check your internet connection and try again.'}
+                    </p>
+                    <Button 
+                      onClick={onRetryApi}
+                      variant="outline"
+                    >
+                      <Target className="h-4 w-4 mr-2" />
+                      Retry Connection
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="library" className="space-y-4">
@@ -312,7 +432,7 @@ export function Dashboard({
               <CardHeader>
                 <CardTitle>Exercise Library</CardTitle>
                 <CardDescription>
-                  Access our comprehensive library of 800+ physical therapy exercises
+                  Access our comprehensive library of 700+ physical therapy exercises
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -333,7 +453,7 @@ export function Dashboard({
           </TabsContent>
 
           <TabsContent value="progress" className="space-y-4">
-            <ProgressChart workoutLogs={workoutLogs} exercises={exercises} />
+            <ProgressChart workoutLogs={workoutLogs} exercises={exerciseLibrary} />
           </TabsContent>
         </Tabs>
       </div>

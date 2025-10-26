@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { Search, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { exerciseService, ExternalExercise, ExerciseFilters } from '../services/exerciseService';
+import { pythonBackendService, ExternalExercise, ExerciseFilters } from '../services/pythonBackendService';
 import { Exercise } from '../App';
 
 interface ExerciseLibraryProps {
@@ -40,19 +40,57 @@ export function ExerciseLibrary({ onSelectExercise, onBack }: ExerciseLibraryPro
     try {
       setLoading(true);
       setError(null);
-      const ptExercises = await exerciseService.getPhysicalTherapyExercises();
-      setExercises(ptExercises);
+      
+      console.log('🔄 Loading exercises from Python backend...');
+      const allExercises = await pythonBackendService.getAllExercises();
+      console.log('✅ Loaded', allExercises.length, 'exercises from Python backend');
+      
+      setExercises(allExercises);
+      setFilteredExercises(allExercises);
     } catch (err) {
-      setError('Failed to load exercises. Please try again later.');
-      console.error('Error loading exercises:', err);
+      console.error('❌ Error loading exercises:', err);
+      setError('Failed to load exercises. Please make sure the Python backend is running.');
     } finally {
       setLoading(false);
     }
   };
 
-  const applyFilters = async () => {
+  const applyFilters = () => {
     try {
-      const filtered = await exerciseService.searchExercises(filters);
+      let filtered = [...exercises];
+      
+      // Apply search term filter
+      if (filters.searchTerm) {
+        const searchTerm = filters.searchTerm.toLowerCase();
+        filtered = filtered.filter(exercise => 
+          exercise.name.toLowerCase().includes(searchTerm) ||
+          exercise.category?.toLowerCase().includes(searchTerm) ||
+          exercise.primaryMuscles.some(muscle => muscle.toLowerCase().includes(searchTerm)) ||
+          exercise.instructions.some(instruction => instruction.toLowerCase().includes(searchTerm))
+        );
+      }
+      
+      // Apply category filter
+      if (filters.category) {
+        filtered = filtered.filter(exercise => 
+          exercise.category?.toLowerCase() === filters.category?.toLowerCase()
+        );
+      }
+      
+      // Apply level filter
+      if (filters.level) {
+        filtered = filtered.filter(exercise => 
+          exercise.level === filters.level
+        );
+      }
+      
+      // Apply equipment filter
+      if (filters.equipment) {
+        filtered = filtered.filter(exercise => 
+          exercise.equipment?.toLowerCase() === filters.equipment?.toLowerCase()
+        );
+      }
+      
       setFilteredExercises(filtered);
       setCurrentPage(1); // Reset to first page when filters change
     } catch (err) {
@@ -72,19 +110,7 @@ export function ExerciseLibrary({ onSelectExercise, onBack }: ExerciseLibraryPro
   };
 
   const convertToAppExercise = (externalExercise: ExternalExercise): Exercise => {
-    return {
-      id: `ext_${externalExercise.id}`,
-      name: externalExercise.name,
-      description: externalExercise.instructions[0] || 'No description available',
-      difficulty: externalExercise.level === 'expert' ? 'advanced' : externalExercise.level,
-      duration: 10, // Default duration
-      sets: 3, // Default sets
-      reps: 10, // Default reps
-      category: externalExercise.category || 'General',
-      targetArea: externalExercise.primaryMuscles.join(', '),
-      bodyParts: [...externalExercise.primaryMuscles, ...externalExercise.secondaryMuscles],
-      instructions: externalExercise.instructions
-    };
+    return pythonBackendService.convertToAppExercise(externalExercise);
   };
 
   const handleSelectExercise = (exercise: ExternalExercise) => {

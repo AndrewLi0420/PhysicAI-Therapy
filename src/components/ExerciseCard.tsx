@@ -8,9 +8,23 @@ type ExerciseCardProps = {
   exercise: Exercise;
   onSelect: () => void;
   logs: WorkoutLog[];
+  showAddButton?: boolean;
+  showRemoveButton?: boolean;
+  isAdded?: boolean;
+  onAdd?: () => void;
+  onRemove?: () => void;
 };
 
-export function ExerciseCard({ exercise, onSelect, logs }: ExerciseCardProps) {
+export function ExerciseCard({ 
+  exercise, 
+  onSelect, 
+  logs, 
+  showAddButton = false, 
+  showRemoveButton = false, 
+  isAdded = false, 
+  onAdd, 
+  onRemove 
+}: ExerciseCardProps) {
   const today = new Date().toISOString().split('T')[0];
   const completedToday = logs.some(log => log.date === today && log.completed);
   const totalCompleted = logs.filter(log => log.completed).length;
@@ -53,9 +67,36 @@ export function ExerciseCard({ exercise, onSelect, logs }: ExerciseCardProps) {
           <span className="text-sm text-muted-foreground">
             Completed {totalCompleted}x
           </span>
-          <Button size="sm" onClick={(e) => { e.stopPropagation(); onSelect(); }}>
-            Start
-          </Button>
+          {showAddButton && (
+            <Button 
+              size="sm" 
+              variant={isAdded ? "secondary" : "default"}
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                if (onAdd) onAdd(); 
+              }}
+              disabled={isAdded}
+            >
+              {isAdded ? "Added" : "Add"}
+            </Button>
+          )}
+          {showRemoveButton && (
+            <Button 
+              size="sm" 
+              variant="destructive"
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                if (onRemove) onRemove(); 
+              }}
+            >
+              Remove
+            </Button>
+          )}
+          {!showAddButton && !showRemoveButton && (
+            <Button size="sm" onClick={(e) => { e.stopPropagation(); onSelect(); }}>
+              Start
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
